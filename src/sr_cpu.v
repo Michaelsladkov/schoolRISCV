@@ -21,6 +21,7 @@ module sr_cpu
 );
     //control wires
     wire        aluZero;
+    wire        aluUnsignedOF;
     wire        pcSrc;
     wire        regWrite;
     wire        aluSrc;
@@ -94,6 +95,7 @@ module sr_cpu
         .srcB       ( srcB         ),
         .oper       ( aluControl   ),
         .zero       ( aluZero      ),
+        .unsigned_of( aluUnsignedOF),
         .result     ( aluResult    ) 
     );
 
@@ -101,15 +103,16 @@ module sr_cpu
 
     //control
     sr_control sm_control (
-        .cmdOp      ( cmdOp        ),
-        .cmdF3      ( cmdF3        ),
-        .cmdF7      ( cmdF7        ),
-        .aluZero    ( aluZero      ),
-        .pcSrc      ( pcSrc        ),
-        .regWrite   ( regWrite     ),
-        .aluSrc     ( aluSrc       ),
-        .wdSrc      ( wdSrc        ),
-        .aluControl ( aluControl   ) 
+        .cmdOp         ( cmdOp         ),
+        .cmdF3         ( cmdF3         ),
+        .cmdF7         ( cmdF7         ),
+        .aluZero       ( aluZero       ),
+        .aluUnsignedOF ( aluUnsignedOF ),
+        .pcSrc         ( pcSrc         ),
+        .regWrite      ( regWrite      ),
+        .aluSrc        ( aluSrc        ),
+        .wdSrc         ( wdSrc         ),
+        .aluControl    ( aluControl    ) 
     );
 
 endmodule
@@ -163,6 +166,7 @@ module sr_control
     input     [ 2:0] cmdF3,
     input     [ 6:0] cmdF7,
     input            aluZero,
+    input            aluUnsignedOF,
     output           pcSrc, 
     output reg       regWrite, 
     output reg       aluSrc,
@@ -171,7 +175,8 @@ module sr_control
 );
     reg          branch;
     reg          condZero;
-    assign pcSrc = branch & (aluZero == condZero);
+    reg          condUnsignedOF;
+    assign pcSrc = branch & (aluZero == condZero || aluUnsignedOF == condUnsignedOF);
 
     always @ (*) begin
         branch      = 1'b0;
@@ -193,6 +198,7 @@ module sr_control
 
             { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : begin branch = 1'b1; condZero = 1'b1; aluControl = `ALU_SUB; end
             { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : begin branch = 1'b1; aluControl = `ALU_SUB; end
+            { `RVF7_ANY,  `RVF3_BLTU, `RVOP_BLTU } : begin branch = 1'b1; condUnsignedOF = 1'b1; aluControl = `ALU_SUB; end
         endcase
     end
 endmodule
@@ -203,6 +209,7 @@ module sr_alu
     input  [31:0] srcB,
     input  [ 2:0] oper,
     output        zero,
+    output        unsigned_of,
     output reg [31:0] result
 );
     always @ (*) begin
@@ -212,10 +219,12 @@ module sr_alu
             `ALU_OR   : result = srcA | srcB;
             `ALU_SRL  : result = srcA >> srcB [4:0];
             `ALU_SLTU : result = (srcA < srcB) ? 1 : 0;
-            `ALU_SUB : result = srcA - srcB;
+            `ALU_SUB  : result = srcA - srcB;
         endcase
     end
-
+    assign unsigned_of = 
+        (oper == `ALU_ADD && (result < srcA && result < srcB)) ||
+        (oper == `ALU_SUB && result > srcA);
     assign zero   = (result == 0);
 endmodule
 

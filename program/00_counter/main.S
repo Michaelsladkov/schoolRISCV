@@ -6,5 +6,8 @@
             .text
 
 start:      mv a0, zero              # t0 = 0
+            li a1, 37
 counter:    addi a0, a0, 1           # t0 = t0 + 1
-            beq zero, zero, counter  # if t0 == t1 then counter
+            bltu a0, a1, counter
+end:
+            beq zero, zero, end

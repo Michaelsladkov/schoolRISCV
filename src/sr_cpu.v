@@ -118,12 +118,15 @@ module sr_cpu
     );
     wire start_calc;
     wire math_unit_busy;
-
-    delay delay (
-        .start(start_calc),
-        .clk(clk),
-        .rst(~rst_n),
-        .busy(math_unit_busy)
+    
+    math_unit math_unit(
+        .clk_i      ( clk            ),
+        .rst_i      ( ~rst_n         ),
+        .start_i    ( start_calc     ),
+        .a_bi       ( rd1[7:0]       ),
+        .b_bi       ( rd2[7:0]       ),
+        .y_bo       ( aluResult      ),
+        .busy_o     ( math_unit_busy )
     );
 
 endmodule

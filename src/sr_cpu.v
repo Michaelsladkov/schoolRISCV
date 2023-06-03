@@ -22,7 +22,7 @@ module sr_cpu
     //control wires
     wire        aluZero;
     wire        aluUnsignedOF;
-    wire        pcSrc;
+    wire  [1:0] pcSrc;
     wire        regWrite;
     wire        aluSrc;
     wire        wdSrc;
@@ -43,7 +43,7 @@ module sr_cpu
     wire [31:0] pc;
     wire [31:0] pcBranch = pc + immB;
     wire [31:0] pcPlus4  = pc + 4;
-    wire [31:0] pcNext   = pcSrc ? pcBranch : pcPlus4;
+    wire [31:0] pcNext   = pcSrc[1] ? pc : (pcSrc[0] ? pcBranch : pcPlus4);
     sm_register r_pc(clk ,rst_n, pcNext, pc);
 
     //program memory access
@@ -103,16 +103,27 @@ module sr_cpu
 
     //control
     sr_control sm_control (
-        .cmdOp         ( cmdOp         ),
-        .cmdF3         ( cmdF3         ),
-        .cmdF7         ( cmdF7         ),
-        .aluZero       ( aluZero       ),
-        .aluUnsignedOF ( aluUnsignedOF ),
-        .pcSrc         ( pcSrc         ),
-        .regWrite      ( regWrite      ),
-        .aluSrc        ( aluSrc        ),
-        .wdSrc         ( wdSrc         ),
-        .aluControl    ( aluControl    ) 
+        .cmdOp          ( cmdOp          ),
+        .cmdF3          ( cmdF3          ),
+        .cmdF7          ( cmdF7          ),
+        .math_unit_busy ( math_unit_busy ),
+        .aluZero        ( aluZero        ),
+        .aluUnsignedOF  ( aluUnsignedOF  ),
+        .pcSrc          ( pcSrc          ),
+        .regWrite       ( regWrite       ),
+        .aluSrc         ( aluSrc         ),
+        .wdSrc          ( wdSrc          ),
+        .aluControl     ( aluControl     ),
+        .start_calc     ( start_calc     )
+    );
+    wire start_calc;
+    wire math_unit_busy;
+
+    delay delay (
+        .start(start_calc),
+        .clk(clk),
+        .rst(~rst_n),
+        .busy(math_unit_busy)
     );
 
 endmodule
@@ -167,16 +178,19 @@ module sr_control
     input     [ 6:0] cmdF7,
     input            aluZero,
     input            aluUnsignedOF,
-    output           pcSrc, 
+    input            math_unit_busy,
+    output    [ 1:0] pcSrc, 
     output reg       regWrite, 
     output reg       aluSrc,
     output reg       wdSrc,
-    output reg [2:0] aluControl
+    output reg [2:0] aluControl,
+    output reg       start_calc
 );
     reg          branch;
     reg          condZero;
     reg          condUnsignedOF;
-    assign pcSrc = branch & (aluZero == condZero || aluUnsignedOF == condUnsignedOF);
+    assign pcSrc[0] = branch & (aluZero == condZero || aluUnsignedOF == condUnsignedOF);
+    assign pcSrc[1] = math_unit_busy;
 
     always @ (*) begin
         branch      = 1'b0;
@@ -184,6 +198,7 @@ module sr_control
         regWrite    = 1'b0;
         aluSrc      = 1'b0;
         wdSrc       = 1'b0;
+        start_calc  = 1'b0;
         aluControl  = `ALU_ADD;
 
         casez( {cmdF7, cmdF3, cmdOp} )
@@ -192,6 +207,7 @@ module sr_control
             { `RVF7_SRL,  `RVF3_SRL,  `RVOP_SRL  } : begin regWrite = 1'b1; aluControl = `ALU_SRL;  end
             { `RVF7_SLTU, `RVF3_SLTU, `RVOP_SLTU } : begin regWrite = 1'b1; aluControl = `ALU_SLTU; end
             { `RVF7_SUB,  `RVF3_SUB,  `RVOP_SUB  } : begin regWrite = 1'b1; aluControl = `ALU_SUB;  end
+            { `RVF7_HYP,  `RVF3_HYP,  `RVOP_HYP  } : begin regWrite = 1'b1; start_calc = 1'b1;      end 
 
             { `RVF7_ANY,  `RVF3_ADDI, `RVOP_ADDI } : begin regWrite = 1'b1; aluSrc = 1'b1; aluControl = `ALU_ADD; end
             { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : begin regWrite = 1'b1; wdSrc  = 1'b1; end
@@ -249,4 +265,36 @@ module sm_register_file
 
     always @ (posedge clk)
         if(we3) rf [a3] <= wd3;
+endmodule
+
+module delay
+(
+    input clk,
+    input rst,
+    input start,
+    output busy
+);
+    localparam IDLE = 1'b0;
+    localparam BUSY = 1'b1;
+    localparam DELAY_SIZE = 4'd10;
+    reg [3:0] counter;
+    reg state;
+
+    assign busy = state == BUSY;
+    always @(posedge clk)
+    if (rst) begin
+        counter <= 0;
+        state <= IDLE;
+    end else case(state)
+        IDLE:
+            if (start) begin
+                state <= BUSY;
+                counter <= 0;
+            end
+        BUSY: begin
+            counter <= counter + 1;
+            if (counter == DELAY_SIZE)
+                state <= IDLE;
+        end
+    endcase
 endmodule

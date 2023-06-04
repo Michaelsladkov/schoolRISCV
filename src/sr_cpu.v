@@ -25,7 +25,7 @@ module sr_cpu
     wire  [1:0] pcSrc;
     wire        regWrite;
     wire        aluSrc;
-    wire        wdSrc;
+    wire  [1:0] wdSrc;
     wire  [2:0] aluControl;
 
     //instruction decode wires
@@ -99,14 +99,15 @@ module sr_cpu
         .result     ( aluResult    ) 
     );
 
-    assign wd3 = wdSrc ? immU : aluResult;
+    assign wd3 = wdSrc[1] ? mathUnitResult : (wdSrc[0] ? immU : aluResult);
 
     //control
     sr_control sm_control (
+        .clk            ( clk            ),
         .cmdOp          ( cmdOp          ),
         .cmdF3          ( cmdF3          ),
         .cmdF7          ( cmdF7          ),
-        .math_unit_busy ( math_unit_busy ),
+        .mathUnitBusy   ( mathUnitBusy   ),
         .aluZero        ( aluZero        ),
         .aluUnsignedOF  ( aluUnsignedOF  ),
         .pcSrc          ( pcSrc          ),
@@ -117,7 +118,8 @@ module sr_cpu
         .start_calc     ( start_calc     )
     );
     wire start_calc;
-    wire math_unit_busy;
+    wire mathUnitBusy;
+    wire [8:0] mathUnitResult;
     
     math_unit math_unit(
         .clk_i      ( clk            ),
@@ -125,8 +127,8 @@ module sr_cpu
         .start_i    ( start_calc     ),
         .a_bi       ( rd1[7:0]       ),
         .b_bi       ( rd2[7:0]       ),
-        .y_bo       ( aluResult      ),
-        .busy_o     ( math_unit_busy )
+        .y_bo       ( mathUnitResult ),
+        .busy_o     ( mathUnitBusy   )
     );
 
 endmodule
@@ -176,33 +178,40 @@ endmodule
 
 module sr_control
 (
+    input            clk,
     input     [ 6:0] cmdOp,
     input     [ 2:0] cmdF3,
     input     [ 6:0] cmdF7,
     input            aluZero,
     input            aluUnsignedOF,
-    input            math_unit_busy,
+    input            mathUnitBusy,
     output    [ 1:0] pcSrc, 
     output reg       regWrite, 
     output reg       aluSrc,
-    output reg       wdSrc,
+    output reg [1:0]     wdSrc,
     output reg [2:0] aluControl,
     output reg       start_calc
 );
     reg          branch;
     reg          condZero;
     reg          condUnsignedOF;
-    assign pcSrc[0] = branch & (aluZero == condZero || aluUnsignedOF == condUnsignedOF);
-    assign pcSrc[1] = math_unit_busy;
+    reg          mathUnitBusyPrev;
+    reg          branchByZero;
+    reg          branchByOf;
+    assign pcSrc[0] = branch & ((branchByZero && aluZero == condZero) || (branchByOf && aluUnsignedOF == condUnsignedOF));
+    assign pcSrc[1] = mathUnitBusy || start_calc;
 
     always @ (*) begin
-        branch      = 1'b0;
-        condZero    = 1'b0;
-        regWrite    = 1'b0;
-        aluSrc      = 1'b0;
-        wdSrc       = 1'b0;
-        start_calc  = 1'b0;
-        aluControl  = `ALU_ADD;
+        branch         = 1'b0;
+        condZero       = 1'b0;
+        condUnsignedOF = 1'b0;
+        branchByZero   = 1'b0;
+        branchByOf     = 1'b0;
+        regWrite       = 1'b0;
+        aluSrc         = 1'b0;
+        wdSrc          = mathUnitBusyPrev ? 2'b10 : 2'b0;
+        start_calc     = 1'b0;
+        aluControl     = `ALU_ADD;
 
         casez( {cmdF7, cmdF3, cmdOp} )
             { `RVF7_ADD,  `RVF3_ADD,  `RVOP_ADD  } : begin regWrite = 1'b1; aluControl = `ALU_ADD;  end
@@ -210,16 +219,21 @@ module sr_control
             { `RVF7_SRL,  `RVF3_SRL,  `RVOP_SRL  } : begin regWrite = 1'b1; aluControl = `ALU_SRL;  end
             { `RVF7_SLTU, `RVF3_SLTU, `RVOP_SLTU } : begin regWrite = 1'b1; aluControl = `ALU_SLTU; end
             { `RVF7_SUB,  `RVF3_SUB,  `RVOP_SUB  } : begin regWrite = 1'b1; aluControl = `ALU_SUB;  end
-            { `RVF7_HYP,  `RVF3_HYP,  `RVOP_HYP  } : begin regWrite = 1'b1; start_calc = 1'b1;      end 
+            { `RVF7_HYP,  `RVF3_HYP,  `RVOP_HYP  } : begin regWrite = 1'b1; start_calc = mathUnitBusyPrev ? 1'b0 : 1'b1; wdSrc = 2'b10; end 
 
             { `RVF7_ANY,  `RVF3_ADDI, `RVOP_ADDI } : begin regWrite = 1'b1; aluSrc = 1'b1; aluControl = `ALU_ADD; end
             { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : begin regWrite = 1'b1; wdSrc  = 1'b1; end
 
-            { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : begin branch = 1'b1; condZero = 1'b1; aluControl = `ALU_SUB; end
-            { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : begin branch = 1'b1; aluControl = `ALU_SUB; end
-            { `RVF7_ANY,  `RVF3_BLTU, `RVOP_BLTU } : begin branch = 1'b1; condUnsignedOF = 1'b1; aluControl = `ALU_SUB; end
+            { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : begin branch = 1'b1; condZero = 1'b1; aluControl = `ALU_SUB; branchByZero = 1'b1; end
+            { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : begin branch = 1'b1; aluControl = `ALU_SUB; branchByZero = 1'b1; end
+            { `RVF7_ANY,  `RVF3_BLTU, `RVOP_BLTU } : begin branch = 1'b1; condUnsignedOF = 1'b1; aluControl = `ALU_SUB; branchByOf = 1'b1; end
         endcase
     end
+
+    always @ (posedge clk) begin
+        mathUnitBusyPrev <= mathUnitBusy;
+    end
+
 endmodule
 
 module sr_alu

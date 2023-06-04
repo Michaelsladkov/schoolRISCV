@@ -57,7 +57,7 @@ parser.add_argument("output", help="output file path")
 args = parser.parse_args()
 
 with open(args.input,"r") as inp:
-    with open(args.output, "a") as out:
+    with open(args.output, "w") as out:
         line = inp.readline()
         while line:
             line_process(line, out)

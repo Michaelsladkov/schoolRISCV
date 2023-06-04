@@ -34,4 +34,38 @@
 #define rx30 11110
 #define rx31 11111
 
+#define rzero 00000
+#define rra 00001
+#define rsp 00010
+#define rgp 00011
+#define rtp 00100
+#define rt0 00101
+#define rt1 00110
+#define rt2 00111
+#define rfp 01000
+#define rs0 01000
+#define rs1 01001
+#define ra0 01010
+#define ra1 01011
+#define ra2 01100
+#define ra3 01101
+#define ra4 01110
+#define ra5 01111
+#define ra6 10000
+#define ra7 10001
+#define rs2 10010
+#define rs3 10011
+#define rs4 10100
+#define rs5 10101
+#define rs6 10110
+#define rs7 10111
+#define rs8 11000
+#define rs9 11001
+#define rs10 11010
+#define rs11 11011
+#define rt3 11100
+#define rt4 11101
+#define rt5 11110
+#define rt6 11111
+
 #endif

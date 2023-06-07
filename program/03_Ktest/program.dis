@@ -5,10 +5,10 @@ program.elf:     file format elf32-littleriscv
 Disassembly of section .text:
 
 00000000 <.text>:
-   0:	0fb00513          	addi	a0,zero,251
-   4:	0fe00593          	addi	a1,zero,254
+   0:	0ff00513          	addi	a0,zero,255
+   4:	0ff00593          	addi	a1,zero,255
    8:	06b5656b          	0x6b5656b
-   c:	16500613          	addi	a2,zero,357
+   c:	16800613          	addi	a2,zero,360
   10:	00c51663          	bne	a0,a2,1c <fail>
 
 00000014 <success>:

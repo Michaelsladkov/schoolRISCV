@@ -6,18 +6,34 @@
 #include "new_instructions.h"
 #include "reg_codes.h"
 
-#define OP1 251
-#define OP2 254
-#define EXPECTED 357
-
-            .text
+.text
 
 start:      
-            li x10, OP1
-            li x11, OP2
-            hyp rx10, rx11, rx10
-            li x12, EXPECTED
-            bne x10, x12, fail
+    li x10, 251
+    li x11, 254
+    li x12, 357
+    hyp rx10, rx11, rx10
+    bne x10, x12, fail
+    li x10, 0
+    li x11, 0
+    li x12, 0
+    hyp rx10, rx11, rx10
+    bne x10, x12, fail
+    li x10, 0
+    li x11, 42
+    li x12, 42
+    hyp rx10, rx11, rx10
+    bne x10, x12, fail
+    li x10, 12
+    li x11, 9
+    li x12, 15
+    hyp rx10, rx11, rx10
+    bne x10, x12, fail
+    li x10, 14
+    li x11, 88
+    li x12, 89
+    hyp rx10, rx11, rx10
+    bne x10, x12, fail
 
 success:
     li a0, 0
@@ -28,4 +44,4 @@ fail:
     beq zero, zero, end
 
 end:
-            beq zero, zero, end
+    beq zero, zero, end
